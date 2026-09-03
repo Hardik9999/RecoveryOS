@@ -1,0 +1,8 @@
+{
+  "baseline_brier": 0.14983819615142918,
+  "baseline_roc_auc": 0.8793103448275862,
+  "xgboost_calibrated_brier": 0.14885388804592362,
+  "xgboost_calibrated_roc_auc": 0.8189655172413792,
+  "xgboost_calibrated_pr_auc": 0.6021085858585858,
+  "xgboost_calibrated_log_loss": 0.45537129727455566
+}
