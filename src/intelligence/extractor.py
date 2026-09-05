@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from src.database.models import Payment, PaymentFailure, Customer
 from src.intelligence.context import RecoveryContext, FailureContext, CustomerContext, TransactionContext
@@ -37,6 +37,8 @@ class FeatureExtractor:
         # 2. Transaction Context
         # Convert created_at (iso string) to datetime to extract hour/day
         dt = datetime.fromisoformat(payment.created_at)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         tx_ctx = TransactionContext(
             amount=float(payment.amount),
             currency=payment.currency,
@@ -75,6 +77,8 @@ class FeatureExtractor:
                 # Sort by created_at desc
                 success_payments.sort(key=lambda x: x.created_at, reverse=True)
                 last_success_dt = datetime.fromisoformat(success_payments[0].created_at)
+                if last_success_dt.tzinfo is None:
+                    last_success_dt = last_success_dt.replace(tzinfo=timezone.utc)
                 delta = dt - last_success_dt
                 days_since_last_success = delta.days
             else:

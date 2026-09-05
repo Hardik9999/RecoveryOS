@@ -114,7 +114,7 @@ class TestAgentOrchestration:
 
     def test_policy_deny_prevents_execution(self, setup_graph):
         """If policy denies the action (e.g., FRAUD), execution must not occur."""
-        graph, executor = setup_graph()
+        graph, executor = setup_graph(llm_responses={"FRAUD": {"action": "RETRY", "rationale": "I want to retry", "confidence": 0.9}})
         
         state = dict(BASE_STATE)
         state["recovery_context"] = {
@@ -123,7 +123,7 @@ class TestAgentOrchestration:
             "failure_severity": "TERMINAL"
         }
         
-        # The MockLLM will default to proposing RETRY.
+        # The MockLLM is forced to propose RETRY.
         # Policy should intercept this and DENY it because it's FRAUD.
         result = graph.invoke(state)
         
@@ -137,8 +137,11 @@ class TestAgentOrchestration:
 
     def test_max_attempts_exhausted(self, setup_graph):
         """If attempt count reaches max, policy denies and loops end."""
-        # Force all attempts to fail
-        graph, executor = setup_graph(executor_outcomes={1: False, 2: False, 3: False, 4: False})
+        # Force all attempts to fail, and force LLM to propose RETRY
+        graph, executor = setup_graph(
+            executor_outcomes={1: False, 2: False, 3: False, 4: False},
+            llm_responses={"BANK": {"action": "RETRY", "rationale": "stubborn", "confidence": 0.9}}
+        )
         
         # Start at attempt 2. 
         # Next attempt will be 3 (fails). Next is 4 -> Policy blocks.

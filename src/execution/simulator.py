@@ -27,14 +27,14 @@ class DBBackedSimulatorExecutor(RecoveryExecutor):
             
             if existing_action:
                 if existing_action.action_status == "EXECUTED":
-                    # Action already ran. Return a safe idempotent success-like result
-                    # (In a real system, you'd fetch the actual outcome record)
+                    from src.database.models import RecoveryOutcome
+                    outcome = self.db.query(RecoveryOutcome).filter(RecoveryOutcome.recovery_action_id == existing_action.id).first()
                     return ExecutionResult(
                         payment_id=payment_id,
                         action_type=action,
-                        success=True,
-                        amount_recovered=0.0,
-                        gateway_response={"status": "already_executed"},
+                        success=outcome.success if outcome else True,
+                        amount_recovered=float(outcome.amount_recovered) if outcome and outcome.amount_recovered else 0.0,
+                        gateway_response=outcome.gateway_response if outcome else {"status": "already_executed"},
                         error_message="Idempotent return."
                     )
                 else:

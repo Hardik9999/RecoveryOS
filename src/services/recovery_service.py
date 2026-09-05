@@ -9,6 +9,7 @@ Phase 1–7 modules.
 import logging
 import uuid
 from typing import Optional, Dict, Any
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
 from src.database.models import Payment, PaymentFailure, RecoveryAction, RecoveryOutcome
@@ -123,6 +124,33 @@ class RecoveryService:
         # 6. Run the LangGraph Agent (which includes policy check and execution)
         logger.info("Invoking LangGraph recovery agent", extra={"payment_id": payment_id})
         executor = DBBackedSimulatorExecutor(self.db)
+        
+        now = datetime.now(timezone.utc)
+        
+        last_action = self.db.query(RecoveryAction).filter(
+            RecoveryAction.payment_id == payment.id,
+            RecoveryAction.action_status == "EXECUTED"
+        ).order_by(RecoveryAction.attempted_at.desc()).first()
+        
+        seconds_since_last_action = None
+        seconds_since_last_attempt = None
+        last_action_type = None
+
+        if last_action:
+            last_action_type = last_action.action_type
+            last_attempted_at = datetime.fromisoformat(last_action.attempted_at)
+            if last_attempted_at.tzinfo is None:
+                last_attempted_at = last_attempted_at.replace(tzinfo=timezone.utc)
+            seconds_since_last_action = int((now - last_attempted_at).total_seconds())
+            seconds_since_last_attempt = seconds_since_last_action
+            
+        twenty_four_hours_ago = now - timedelta(hours=24)
+        contact_attempts_last_24h = self.db.query(RecoveryAction).filter(
+            RecoveryAction.payment_id == payment.id,
+            RecoveryAction.action_status == "EXECUTED",
+            RecoveryAction.action_type.in_(["SEND_PAYMENT_REMINDER", "SEND_PAYMENT_LINK"]),
+            RecoveryAction.attempted_at >= twenty_four_hours_ago.isoformat()
+        ).count()
 
         # Build agent state from real data
         agent_context = {
@@ -132,6 +160,10 @@ class RecoveryService:
             "failure_severity": tax_info["severity"],
             "customer_risk_score": recovery_context.customer.risk_score,
             "recovery_probability": recovery_probability,
+            "seconds_since_last_attempt": seconds_since_last_attempt,
+            "last_action_type": last_action_type,
+            "seconds_since_last_action": seconds_since_last_action,
+            "contact_attempts_last_24h": contact_attempts_last_24h,
         }
 
         initial_state = {

@@ -30,7 +30,19 @@ class MockLLM(AgentLLMProvider):
         for key, resp in self.predefined_responses.items():
             if key in context_summary:
                 return schema(**resp)
-        return schema(**self.default_response)
+        try:
+            summary_dict = json.loads(context_summary)
+            economic_decision = summary_dict.get("economic_decision") or {}
+            recommended = economic_decision.get("recommended_action", "RETRY")
+            
+            response = {
+                "action": recommended,
+                "rationale": f"Mocking recommended action: {recommended}",
+                "confidence": 0.9
+            }
+            return schema(**response)
+        except Exception:
+            return schema(**self.default_response)
 
 
 class GroqLLM(AgentLLMProvider):

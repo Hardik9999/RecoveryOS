@@ -172,6 +172,7 @@ RecoveryOS/
 
 ---
 
+<!-- 
 ## 9. Demo & Walkthrough
 
 A comprehensive step-by-step video script and screen-by-screen talking points are located in:
@@ -181,6 +182,7 @@ Place the final demo video file at:
 ```text
 demo/recoveryos-demo.mp4
 ```
+-->
 
 ### Key Demo Highlights:
 1. **Executive Impact:** Viewing Net Recovered Value and Interventions Avoided on the dashboard.
