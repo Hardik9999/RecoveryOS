@@ -2,8 +2,10 @@ import streamlit as st
 from ui.api_client import APIClient, APIClientError
 from ui.utils.formatting import format_currency, format_percentage, format_action_name
 from ui.utils.icons import get_svg_icon, render_header, render_badge, render_banner, render_card_header
+from ui.utils.layout import render_layout
 
 st.set_page_config(page_title="Decision Trace | RecoveryOS", page_icon="ui/assets/favicon.png", layout="wide")
+render_layout()
 
 header_html = render_header(
     title="Decision Trace",

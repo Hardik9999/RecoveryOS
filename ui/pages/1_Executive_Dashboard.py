@@ -4,8 +4,10 @@ import plotly.express as px
 from ui.api_client import APIClient, APIClientError
 from ui.utils.formatting import format_currency, format_percentage
 from ui.utils.icons import get_svg_icon, render_header, render_banner, render_card_header
+from ui.utils.layout import render_layout
 
 st.set_page_config(page_title="Dashboard | RecoveryOS", page_icon="ui/assets/favicon.png", layout="wide")
+render_layout()
 
 header_html = render_header(
     title="Executive Dashboard",
@@ -103,21 +105,21 @@ try:
         st.markdown(
             f"""
             <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px;">
-                <div style="padding:14px 16px;border-radius:8px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);display:flex;align-items:center;gap:12px;">
+                <div class="info-panel" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);display:flex;align-items:center;gap:12px;">
                     {get_svg_icon("activity", size=20, color="#3b82f6")}
                     <div>
                         <div style="font-size:14px;font-weight:600;color:#f8fafc;">{summary.get('interventions', 0)} Interventions Executed</div>
                         <div style="font-size:12px;color:#94a3b8;">Recovery actions orchestrated across retry, reminders, and payment links.</div>
                     </div>
                 </div>
-                <div style="padding:14px 16px;border-radius:8px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);display:flex;align-items:center;gap:12px;">
+                <div class="info-panel" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);display:flex;align-items:center;gap:12px;">
                     {get_svg_icon("shield_check", size=20, color="#10b981")}
                     <div>
                         <div style="font-size:14px;font-weight:600;color:#f8fafc;">{summary.get('interventions_avoided', 0)} Interventions Intelligently Avoided</div>
                         <div style="font-size:12px;color:#94a3b8;">Saved costs and prevented user fatigue on low-probability or fraudulent payments.</div>
                     </div>
                 </div>
-                <div style="padding:14px 16px;border-radius:8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);display:flex;align-items:center;gap:12px;">
+                <div class="info-panel" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);display:flex;align-items:center;gap:12px;">
                     {get_svg_icon("alert_triangle", size=20, color="#f59e0b")}
                     <div>
                         <div style="font-size:14px;font-weight:600;color:#f8fafc;">{summary.get('escalations', 0)} Severe Escalations</div>

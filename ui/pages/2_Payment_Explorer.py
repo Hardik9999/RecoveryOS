@@ -3,8 +3,10 @@ import pandas as pd
 from ui.api_client import APIClient, APIClientError
 from ui.utils.formatting import format_currency, format_action_name
 from ui.utils.icons import get_svg_icon, render_header, render_badge, render_banner, render_card_header
+from ui.utils.layout import render_layout, record_action
 
 st.set_page_config(page_title="Payment Explorer | RecoveryOS", page_icon="ui/assets/favicon.png", layout="wide")
+render_layout()
 
 header_html = render_header(
     title="Payment Explorer",
@@ -76,7 +78,7 @@ try:
             
             st.markdown(
                 f"""
-                <div style="padding:14px 16px;border-radius:8px;background:rgba(30,41,59,0.5);border:1px solid rgba(148,163,184,0.15);margin-bottom:14px;">
+                <div class="glass-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <span style="font-size:18px;font-weight:700;color:#f8fafc;">{format_currency(details['amount'], details.get('currency', '₹'))}</span>
                         {status_badge}
@@ -99,13 +101,13 @@ try:
                     
                     st.markdown(
                         f"""
-                        <div style="padding:14px;border-radius:8px;background:rgba(15,23,42,0.4);border:1px solid rgba(148,163,184,0.12);margin-top:10px;">
+                        <div class="info-panel">
                             <div style="display:flex;gap:8px;margin-bottom:10px;">
                                 {cat_badge}
                                 {ret_badge}
                             </div>
-                            <div style="font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:4px;">Error Code: <span style="font-family:monospace;color:#f87171;">{f.get('error_code')}</span></div>
-                            <div style="font-size:13px;color:#94a3b8;line-height:1.4;margin-bottom:8px;">{f.get('error_message')}</div>
+                            <div style="font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:4px;">Error Code: <span class="text-mono" style="color:#f87171;">{f.get('error_code')}</span></div>
+                            <div class="text-muted">{f.get('error_message')}</div>
                             <div style="font-size:11px;color:#64748b;">Occurred At: {f.get('occurred_at')}</div>
                         </div>
                         """,
@@ -136,14 +138,14 @@ try:
             with tab3:
                 st.markdown(
                     f"""
-                    <div style="padding:14px;border-radius:8px;background:rgba(15,23,42,0.4);border:1px solid rgba(148,163,184,0.12);margin-top:10px;">
+                    <div class="info-panel">
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                             {get_svg_icon('user', size=16, color='#94a3b8')}
-                            <span style="font-size:13px;color:#cbd5e1;">Customer ID: <code style="color:#38bdf8;">{details.get('customer_id')}</code></span>
+                            <span style="font-size:13px;color:#cbd5e1;">Customer ID: <code class="text-mono" style="color:#38bdf8;background:transparent;">{details.get('customer_id')}</code></span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                             {get_svg_icon('building', size=16, color='#94a3b8')}
-                            <span style="font-size:13px;color:#cbd5e1;">Merchant ID: <code style="color:#38bdf8;">{details.get('merchant_id')}</code></span>
+                            <span style="font-size:13px;color:#cbd5e1;">Merchant ID: <code class="text-mono" style="color:#38bdf8;background:transparent;">{details.get('merchant_id')}</code></span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                             {get_svg_icon('activity', size=16, color='#94a3b8')}
@@ -170,6 +172,10 @@ try:
                             result = APIClient.recover_payment(details['id'])
                             st.session_state.last_recovery_result = result
                             st.session_state.last_recovery_id = details['id']
+                            
+                            # Log action into memory sidebar
+                            record_action(details['id'], result['final_status'])
+                            
                             st.success(f"Workflow completed. Final status: {result['final_status']}")
                             st.info("Navigate to the Decision Trace page to see the full auditable pipeline.")
                             st.rerun()

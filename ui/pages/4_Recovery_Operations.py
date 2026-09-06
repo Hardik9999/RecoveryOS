@@ -3,8 +3,10 @@ import pandas as pd
 from ui.api_client import APIClient, APIClientError
 from ui.utils.formatting import format_currency
 from ui.utils.icons import get_svg_icon, render_header, render_banner, render_card_header, render_badge
+from ui.utils.layout import render_layout
 
 st.set_page_config(page_title="Recovery Operations | RecoveryOS", page_icon="ui/assets/favicon.png", layout="wide")
+render_layout()
 
 header_html = render_header(
     title="Recovery Operations",
