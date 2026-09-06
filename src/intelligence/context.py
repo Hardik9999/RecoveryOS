@@ -7,6 +7,8 @@ class FailureContext(BaseModel):
     category: str
     is_retryable: bool
     severity: str
+    network: Optional[str] = None
+    description: Optional[str] = None
 
 class CustomerContext(BaseModel):
     historical_success_rate: float = Field(..., description="Success rate of previous payments (0.0 to 1.0)")

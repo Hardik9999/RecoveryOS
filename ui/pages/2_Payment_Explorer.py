@@ -99,14 +99,26 @@ try:
                     ret_badge = render_badge(f"Retryable: {is_ret}", status="success" if f.get("is_retryable") else "error")
                     cat_badge = render_badge(f.get("failure_category", "UNKNOWN"), status="warning")
                     
+                    network = ""
+                    error_code = f.get('error_code', '')
+                    if error_code.startswith("NPCI:"):
+                        network = render_badge("NPCI (UPI)", status="success")
+                    elif error_code.startswith("VISA:"):
+                        network = render_badge("VISA", status="info")
+                    elif error_code.startswith("MC:"):
+                        network = render_badge("Mastercard", status="warning")
+                    elif error_code.startswith("NB:"):
+                        network = render_badge("Netbanking", status="default")
+                    
                     st.markdown(
                         f"""
                         <div class="info-panel">
                             <div style="display:flex;gap:8px;margin-bottom:10px;">
+                                {network}
                                 {cat_badge}
                                 {ret_badge}
                             </div>
-                            <div style="font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:4px;">Error Code: <span class="text-mono" style="color:#f87171;">{f.get('error_code')}</span></div>
+                            <div style="font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:4px;">Error Code: <span class="text-mono" style="color:#f87171;">{error_code}</span></div>
                             <div class="text-muted">{f.get('error_message')}</div>
                             <div style="font-size:11px;color:#64748b;">Occurred At: {f.get('occurred_at')}</div>
                         </div>

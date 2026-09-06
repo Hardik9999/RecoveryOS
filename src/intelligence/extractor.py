@@ -31,7 +31,9 @@ class FeatureExtractor:
             error_code=failure_record.error_code,
             category=tax_info["category"],
             is_retryable=tax_info["is_retryable"],
-            severity=tax_info["severity"]
+            severity=tax_info["severity"],
+            network=tax_info.get("network"),
+            description=tax_info.get("description")
         )
 
         # 2. Transaction Context

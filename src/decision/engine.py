@@ -93,8 +93,14 @@ def _get_eligible_actions(inputs: DecisionInput) -> List[RecoveryActionType]:
     elif inputs.failure_category == "USER":
         # User-side failures (e.g. insufficient funds) require user action.
         # Sending a reminder or payment link is appropriate; a silent retry will just fail again.
-        # High-risk customers get a payment link (more friction, higher assurance).
-        if inputs.customer_risk_score >= HIGH_RISK_THRESHOLD or inputs.amount >= LARGE_PAYMENT_THRESHOLD_INR:
+        
+        # Specific handling for MPIN exhaustion / Invalid MPIN (NPCI:U29)
+        if inputs.error_code == "NPCI:U29":
+            eligible = [RecoveryActionType.SEND_PAYMENT_LINK, RecoveryActionType.SEND_PAYMENT_REMINDER]
+        elif inputs.error_code in ["VISA:54", "MC:54"]:
+            # Expired card - link is the only way to get a new card
+            eligible = [RecoveryActionType.SEND_PAYMENT_LINK]
+        elif inputs.customer_risk_score >= HIGH_RISK_THRESHOLD or inputs.amount >= LARGE_PAYMENT_THRESHOLD_INR:
             eligible = [RecoveryActionType.SEND_PAYMENT_LINK, RecoveryActionType.SEND_PAYMENT_REMINDER]
         else:
             eligible = [RecoveryActionType.SEND_PAYMENT_REMINDER, RecoveryActionType.SEND_PAYMENT_LINK]
@@ -102,7 +108,14 @@ def _get_eligible_actions(inputs: DecisionInput) -> List[RecoveryActionType]:
     elif inputs.failure_category == "BANK":
         # Bank-side failures may resolve with retry (e.g. card limit reset) or
         # require customer action (e.g. call bank). Order by context.
-        if inputs.customer_risk_score >= HIGH_RISK_THRESHOLD:
+        
+        # Limit exceeded or Do Not Honor often requires user intervention
+        if inputs.error_code in ["NPCI:U30", "VISA:65", "MC:65", "VISA:05", "MC:05"]:
+            if inputs.amount >= LARGE_PAYMENT_THRESHOLD_INR:
+                eligible = [RecoveryActionType.SEND_PAYMENT_LINK, RecoveryActionType.RETRY]
+            else:
+                eligible = [RecoveryActionType.SEND_PAYMENT_LINK, RecoveryActionType.SEND_PAYMENT_REMINDER]
+        elif inputs.customer_risk_score >= HIGH_RISK_THRESHOLD:
             # High-risk: don't auto-retry, send a link for customer to manage
             eligible = [RecoveryActionType.SEND_PAYMENT_LINK, RecoveryActionType.SEND_PAYMENT_REMINDER]
         elif inputs.amount >= LARGE_PAYMENT_THRESHOLD_INR:

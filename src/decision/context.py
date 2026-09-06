@@ -20,6 +20,8 @@ class DecisionInput(BaseModel):
     """All inputs required by the decision engine."""
     payment_id: str
     amount: float = Field(..., description="Payment amount in INR")
+    error_code: Optional[str] = Field(None, description="The raw network error code")
+    network: Optional[str] = Field(None, description="The network that generated the error")
     recovery_probability: float = Field(..., ge=0.0, le=1.0, description="Calibrated probability from Phase 4 model")
     failure_category: str = Field(..., description="USER, BANK, NETWORK, FRAUD, UNKNOWN")
     is_retryable: bool = Field(..., description="Whether the failure is technically retryable")

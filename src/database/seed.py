@@ -6,40 +6,11 @@ from src.database.models import Merchant, Customer, Payment, PaymentFailure, Rec
 import uuid
 import sys
 from datetime import datetime, timedelta
+from src.simulation.rules import determine_failure_type, calculate_recovery_probability
 
 fake = Faker()
 Faker.seed(42)
 random.seed(42)
-
-# -----------------------------------------------------------------------
-# Recovery probability model embedded in the seed data.
-# This creates LEARNABLE signal: recovery chances depend on error type and
-# customer risk score, which are features the ML model has access to.
-# -----------------------------------------------------------------------
-
-# Base recovery probabilities per error code (before risk adjustment)
-RECOVERY_BASE_PROBS = {
-    'INSUFFICIENT_FUNDS': 0.55,   # High — customers often top up and retry
-    'CARD_DECLINED':       0.40,   # Medium — sometimes resolvable
-    'NETWORK_TIMEOUT':     0.70,   # High — transient errors usually resolve
-    'FRAUD_SUSPECTED':     0.05,   # Very low — fraud flags are near-terminal
-}
-
-def compute_recovery_probability(error_code: str, risk_score: float, amount: float) -> float:
-    """
-    Deterministic recovery probability embedding signal into the synthetic data.
-    - Higher risk_score → lower recovery probability
-    - Higher amount → slightly lower recovery probability (friction)
-    - FRAUD_SUSPECTED is near-terminal regardless
-    """
-    base = RECOVERY_BASE_PROBS.get(error_code, 0.20)
-    # Risk score penalty: risk 0.0→no penalty, risk 1.0→40% reduction
-    risk_adjustment = 1.0 - (risk_score * 0.4)
-    # Amount penalty: log-scale, normalized to amounts 50–5000 INR
-    import math
-    amount_factor = max(0.6, 1.0 - (math.log(amount) / math.log(5000)) * 0.3)
-    return min(0.95, max(0.02, base * risk_adjustment * amount_factor))
-
 
 def seed_data(db: Session, target_payments=1000):
     print(f"Starting to seed data. Target payments: {target_payments}")
@@ -118,50 +89,56 @@ def seed_data(db: Session, target_payments=1000):
     db.commit()
     print(f"Finished seeding {len(payments)} payments.")
 
-    # Seed Failures, Actions, and Outcomes with LEARNABLE recovery signal
-    error_codes = ['INSUFFICIENT_FUNDS', 'CARD_DECLINED', 'NETWORK_TIMEOUT', 'FRAUD_SUSPECTED']
-    # Error code → retryable mapping (aligned with taxonomy.py)
-    error_retryable = {
-        'INSUFFICIENT_FUNDS': True,
-        'CARD_DECLINED':       True,
-        'NETWORK_TIMEOUT':     True,
-        'FRAUD_SUSPECTED':     False,
-    }
-
     failed_payments = [p for p in payments if p.status == 'FAILED']
     recovered_count = 0
 
     for p in failed_payments:
-        error_code = random.choice(error_codes)
-        is_retryable = error_retryable[error_code]
+        cust = db.get(Customer, p.customer_id)
+        
+        # Use the simulation rules engine to pick a method-aware failure type
+        rule = determine_failure_type(random.random(), p.payment_method)
+        is_retryable = rule.is_retryable
 
         failure = PaymentFailure(
             id=uuid.uuid4(),
             payment_id=p.id,
-            error_code=error_code,
-            error_message=fake.sentence(),
-            failure_category='FRAUD' if error_code == 'FRAUD_SUSPECTED' else random.choice(['USER', 'BANK', 'NETWORK']),
+            error_code=rule.error_code,
+            error_message=f"Payment failed due to {rule.error_code}",
+            failure_category=rule.category,
             is_retryable=is_retryable
         )
         db.add(failure)
 
-        # Only attempt recovery for retryable failures (FRAUD never gets retried)
-        if not is_retryable:
+        # Only attempt recovery for retryable failures
+        if not is_retryable and rule.base_recovery_prob_delayed == 0.0:
+            p.status = 'FAILED_TERMINAL'
             continue
 
-        # Compute signal-bearing recovery probability
-        cust = db.get(Customer, p.customer_id)
-        recovery_prob = compute_recovery_probability(error_code, cust.risk_score, float(p.amount))
-
         # Choose action based on error type and amount
-        if error_code == 'INSUFFICIENT_FUNDS':
+        if rule.error_code in ['NPCI:U69', 'VISA:51', 'MC:51', 'INSUFFICIENT_FUNDS']:
             action_type = 'SEND_PAYMENT_REMINDER'
-        elif error_code == 'NETWORK_TIMEOUT':
+        elif rule.category == 'NETWORK':
             action_type = 'RETRY'
+        elif not rule.is_retryable:
+            action_type = 'SEND_PAYMENT_LINK'
         elif float(p.amount) > 2000:
             action_type = 'SEND_PAYMENT_LINK'
         else:
             action_type = random.choice(['RETRY', 'SEND_PAYMENT_REMINDER'])
+            
+        is_delayed = action_type in ('SEND_PAYMENT_REMINDER', 'SEND_PAYMENT_LINK')
+        
+        # Compute signal-bearing recovery probability using the rule
+        recovery_prob = calculate_recovery_probability(rule, cust.risk_score, is_delayed)
+        
+        # Amount penalty: log-scale, normalized to amounts 50–5000 INR
+        import math
+        amount_factor = max(0.6, 1.0 - (math.log(float(p.amount)) / math.log(5000)) * 0.3)
+        recovery_prob = min(0.95, max(0.00, recovery_prob * amount_factor))
+        
+        if recovery_prob < 0.05:
+            p.status = 'FAILED_TERMINAL'
+            continue
 
         action = RecoveryAction(
             id=uuid.uuid4(),
@@ -178,6 +155,7 @@ def seed_data(db: Session, target_payments=1000):
 
         # Recovery outcome driven by computed probability (with noise)
         is_success = random.random() < recovery_prob
+
         outcome = RecoveryOutcome(
             id=uuid.uuid4(),
             recovery_action_id=action.id,
@@ -191,6 +169,8 @@ def seed_data(db: Session, target_payments=1000):
             p.status = 'RECOVERED'
             cust.total_recovered += 1
             recovered_count += 1
+        else:
+            p.status = 'FAILED_TERMINAL'
 
         log = AuditLog(
             id=uuid.uuid4(),

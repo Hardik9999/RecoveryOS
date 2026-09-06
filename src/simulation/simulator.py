@@ -21,7 +21,8 @@ class PaymentSimulator:
     def process_initial_payment(
         self, 
         payment_id: uuid.UUID, 
-        risk_score: float, 
+        risk_score: float,
+        payment_method: str = "unknown",
         base_failure_rate: float = 0.25
     ) -> Tuple[bool, Optional[FailureRule], Dict[str, Any]]:
         """
@@ -40,7 +41,7 @@ class PaymentSimulator:
         
         # Payment fails. Determine the reason deterministically.
         failure_val = rng.random()
-        rule = determine_failure_type(failure_val)
+        rule = determine_failure_type(failure_val, payment_method)
         
         return False, rule, {
             "status": "failed", 

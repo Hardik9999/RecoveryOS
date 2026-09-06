@@ -20,7 +20,8 @@ class SimulationAdapter:
         
         is_success, rule, response = self.simulator.process_initial_payment(
             payment_id=payment.id,
-            risk_score=customer.risk_score
+            risk_score=customer.risk_score,
+            payment_method=payment.payment_method
         )
 
         if is_success:

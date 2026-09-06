@@ -97,6 +97,8 @@ class RecoveryService:
         dec_input = DecisionInput(
             payment_id=payment_id,
             amount=float(payment.amount),
+            error_code=failure.error_code,
+            network=tax_info.get("network"),
             recovery_probability=recovery_probability,
             failure_category=tax_info["category"],
             is_retryable=tax_info["is_retryable"],
