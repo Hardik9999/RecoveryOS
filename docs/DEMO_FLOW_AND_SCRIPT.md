@@ -29,17 +29,17 @@ The entire lifecycle of a failed transaction flows through 6 distinct stages:
 
 ```mermaid
 flowchart TD
-    A[Failed Payment] --> B[1. Failure Intelligence & Taxonomy]
-    B --> C[2. ML Recovery Prediction Model]
-    C --> D[3. Economic Decision Engine]
-    D --> E[4. AI Agent Proposal LangGraph + LLM]
-    E --> F{5. Deterministic Policy Guardrails}
-    F -- DENY --> G[Abort / Stop Execution]
-    F -- ALLOW --> H[6. Execution Engine]
-    H --> I[Outcome Recorded & Audited]
-    I -- If Failed & Retries Left --> E
-    I -- If Recovered --> J[Status: RECOVERED]
-    G --> K[Status: FAILED_TERMINAL]
+    A["Failed Payment"] --> B["1. Failure Intelligence & Taxonomy"]
+    B --> C["2. ML Recovery Prediction Model"]
+    C --> D["3. Economic Decision Engine"]
+    D --> E["4. AI Agent Proposal (LangGraph + LLM)"]
+    E --> F{"5. Deterministic Policy Guardrails"}
+    F -->|DENY| G["Abort / Stop Execution"]
+    F -->|ALLOW| H["6. Execution Engine"]
+    H --> I["Outcome Recorded & Audited"]
+    I -->|"If Failed & Retries Left"| E
+    I -->|If Recovered| J["Status: RECOVERED"]
+    G --> K["Status: FAILED_TERMINAL"]
 ```
 
 ### Stage-by-Stage Breakdown
@@ -47,8 +47,8 @@ flowchart TD
 | Stage | Component | What Happens |
 | :--- | :--- | :--- |
 | **1. Failure Intelligence** | `src/intelligence/` | Normalizes raw gateway errors into a clean taxonomy: `NETWORK` (transient), `BANK` (issuer downtime/funds), `USER` (wrong OTP/dropped link), or `FRAUD`/`TERMINAL` (stolen card). |
-| **2. Recovery Prediction** | `src/prediction/` | An XGBoost/probability calibration model predicts the likelihood that this payment can be recovered: $P(\text{recovery}) \in [0, 1]$. It uses strictly point-in-time features without data leakage. |
-| **3. Economic Decision Engine** | `src/decision/` | Calculates **Expected Net Value (ENV)**:<br>$$\text{ENV} = (\text{Amount} \times P(\text{recovery})) - \text{Intervention Cost}$$<br>Filters actions by eligibility and ensures the business never loses money attempting a recovery. |
+| **2. Recovery Prediction** | `src/prediction/` | An XGBoost/probability calibration model predicts the likelihood that this payment can be recovered: **P(recovery) ∈ [0, 1]**. It uses strictly point-in-time features without data leakage. |
+| **3. Economic Decision Engine** | `src/decision/` | Calculates **Expected Net Value (ENV)**:<br><code>ENV = (Amount × P(recovery)) − Intervention Cost</code><br>Filters actions by eligibility and ensures the business never loses money attempting a recovery. |
 | **4. AI Agent (LangGraph)** | `src/agent/` | A reasoning agent (Groq Llama 3 70B / orchestrator) analyzes the transaction context, error details, and economic recommendation to propose the optimal operational action. |
 | **5. Policy Engine Guardrails** | `src/policy/` | An independent, deterministic safety boundary evaluating 9 strict rules (Max 3 attempts, cooldown times, fraud blocks, cost thresholds). **The AI cannot bypass this layer.** |
 | **6. Execution & Audit** | `src/execution/` | Executes the action (e.g. smart retry, payment reminder, or payment link), logs the outcome in the DB, and updates system analytics. |
@@ -179,5 +179,5 @@ Keep these handy in case questions arise:
 | **`FAILED`** | A payment that failed, but is still eligible for recovery attempts. |
 | **`RECOVERED`** | A payment that was successfully recovered via an intervention (retry, reminder, or link). |
 | **`FAILED_TERMINAL`** | A payment that has permanently failed and will never be retried (e.g., suspected fraud, stolen card, or hit the 3-attempt maximum limit). |
-| **`Expected Net Value (ENV)`** | $\text{Gross Recovery Value} - \text{Intervention Cost}$. RecoveryOS only acts if ENV is positive. |
+| **`Expected Net Value (ENV)`** | **Gross Recovery Value − Intervention Cost**. RecoveryOS only acts if ENV is positive. |
 | **`Policy Guardrail`** | Deterministic Python rules that act as an unbreachable firewall between the AI proposal and money movement. |
