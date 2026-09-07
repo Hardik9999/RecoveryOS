@@ -119,6 +119,7 @@ def evaluate_action_eligibility(request: PolicyRequest) -> Optional[PolicyViolat
         customer_risk_score=request.customer_risk_score,
         previous_attempt_count=request.previous_attempt_count,
         payment_method="unknown",
+        error_code=request.error_code
     )
     eligible = _get_eligible_actions(mock_input)
 

@@ -19,6 +19,7 @@ class PolicyRequest(BaseModel):
     """Input to the Policy Engine. Caller is responsible for populating from DB state."""
 
     payment_id: str
+    error_code: str = ""
     proposed_action: RecoveryActionType
 
     # Payment context

@@ -52,6 +52,25 @@ def mock_llm_provider():
     with patch.object(src.agent.nodes, 'get_llm_provider', return_value=mock_llm):
         yield mock_llm
 
+
+def mock_load_context_node(state, db_session):
+    return {
+        **state,
+        "recovery_probability": 0.8,
+        "economic_decision": {
+            "recommended_action": "RETRY",
+            "economically_viable_actions": ["RETRY", "SEND_PAYMENT_LINK"],
+            "expected_net_value": 400.0,
+            "decision_reason": "mocked"
+        },
+        "audit_metadata": state.get("audit_metadata", []) + [{"step": "load_context", "timestamp": "now", "details": {}}],
+        "status": "IN_PROGRESS"
+    }
+
+@pytest.fixture(autouse=True)
+def patch_load_context(monkeypatch):
+    monkeypatch.setattr("src.agent.graph.load_context_node", mock_load_context_node)
+
 @pytest.fixture
 def setup_graph(mock_llm_provider):
     def _setup(executor_outcomes=None, llm_responses=None):

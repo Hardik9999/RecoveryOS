@@ -1,7 +1,8 @@
 """
 LangGraph Nodes for the Recovery Agent.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import uuid
 from src.agent.state import RecoveryState, AuditRecord
 from src.agent.schemas import AgentActionProposal
 from src.agent.llm import get_llm_provider
@@ -11,6 +12,9 @@ from src.policy.context import PolicyRequest
 from src.policy.engine import PolicyEngine
 from src.execution.base import RecoveryExecutor
 from sqlalchemy.orm import Session
+from src.database.models import Payment, PaymentFailure, RecoveryAction
+from src.intelligence.extractor import FeatureExtractor
+from src.intelligence.taxonomy import get_taxonomy_info
 import json
 
 def get_current_time_str() -> str:
@@ -21,28 +25,83 @@ def create_audit_record(step: str, details: dict) -> AuditRecord:
 
 def load_context_node(state: RecoveryState, db_session: Session) -> RecoveryState:
     """
-    Loads features, prediction, and economic decision.
-    (For this phase, we mock the heavy DB feature extraction and use static dummy data,
-    or we can construct a DecisionInput from state context).
+    Dynamically reconstructs state from the database on every invocation.
+    Ensures that retries, cooldowns, and intelligence are fresh.
     """
-    # In a real app, this would use FeatureExtractor and PredictionModel.
-    # We will simulate the DecisionInput based on what is in state['recovery_context'].
-    ctx = state.get("recovery_context", {})
+    payment_id = state["payment_id"]
+    payment = db_session.get(Payment, uuid.UUID(payment_id))
+    failure = db_session.query(PaymentFailure).filter(PaymentFailure.payment_id == payment.id).first()
     
-    # Defaults if missing for testing
-    amount = ctx.get("amount", 500.0)
-    prob = state.get("recovery_probability") or ctx.get("recovery_probability", 0.5)
+    extractor = FeatureExtractor(db_session)
+    recovery_context = extractor.extract_context(payment.id)
     
+    try:
+        from src.prediction.model import RecoveryPredictionModel
+        model = RecoveryPredictionModel()
+        prob = model.predict_probability(recovery_context)
+    except FileNotFoundError:
+        prob = 0.5 if failure.is_retryable else 0.1
+
+    # Fetch attempts and last actions from DB
+    previous_attempts = db_session.query(RecoveryAction).filter(
+        RecoveryAction.payment_id == payment.id,
+        RecoveryAction.action_status == "EXECUTED"
+    ).count()
+
+    now = datetime.now(timezone.utc)
+    last_action = db_session.query(RecoveryAction).filter(
+        RecoveryAction.payment_id == payment.id,
+        RecoveryAction.action_status == "EXECUTED"
+    ).order_by(RecoveryAction.attempted_at.desc()).first()
+    
+    seconds_since_last_action = None
+    seconds_since_last_attempt = None
+    last_action_type = None
+
+    if last_action:
+        last_action_type = last_action.action_type
+        last_attempted_at = datetime.fromisoformat(last_action.attempted_at)
+        if last_attempted_at.tzinfo is None:
+            last_attempted_at = last_attempted_at.replace(tzinfo=timezone.utc)
+        seconds_since_last_action = int((now - last_attempted_at).total_seconds())
+        seconds_since_last_attempt = seconds_since_last_action
+        
+    twenty_four_hours_ago = now - timedelta(hours=24)
+    contact_attempts_last_24h = db_session.query(RecoveryAction).filter(
+        RecoveryAction.payment_id == payment.id,
+        RecoveryAction.action_status == "EXECUTED",
+        RecoveryAction.action_type.in_(["SEND_PAYMENT_REMINDER", "SEND_PAYMENT_LINK"]),
+        RecoveryAction.attempted_at >= twenty_four_hours_ago.isoformat()
+    ).count()
+
+    tax_info = get_taxonomy_info(failure.error_code)
+
+    agent_context = {
+        "amount": float(payment.amount),
+        "failure_category": tax_info["category"],
+        "is_retryable": tax_info["is_retryable"],
+        "failure_severity": tax_info["severity"],
+        "customer_risk_score": recovery_context.customer.risk_score,
+        "recovery_probability": prob,
+        "seconds_since_last_attempt": seconds_since_last_attempt,
+        "last_action_type": last_action_type,
+        "seconds_since_last_action": seconds_since_last_action,
+        "contact_attempts_last_24h": contact_attempts_last_24h,
+        "error_code": failure.error_code if failure else "",
+    }
+
     dec_input = DecisionInput(
-        payment_id=state["payment_id"],
-        amount=amount,
+        payment_id=payment_id,
+        amount=float(payment.amount),
+        error_code=failure.error_code,
+        network=tax_info.get("network"),
         recovery_probability=prob,
-        failure_category=ctx.get("failure_category", "BANK"),
-        is_retryable=ctx.get("is_retryable", True),
-        failure_severity=ctx.get("failure_severity", "MEDIUM"),
-        customer_risk_score=ctx.get("customer_risk_score", 0.3),
-        previous_attempt_count=state.get("attempt_number", 0),
-        payment_method="card"
+        failure_category=tax_info["category"],
+        is_retryable=tax_info["is_retryable"],
+        failure_severity=tax_info["severity"],
+        customer_risk_score=recovery_context.customer.risk_score,
+        previous_attempt_count=previous_attempts,
+        payment_method=payment.payment_method or "unknown"
     )
     
     decision_output = decide(dec_input)
@@ -54,10 +113,15 @@ def load_context_node(state: RecoveryState, db_session: Session) -> RecoveryStat
     
     return {
         **state,
+        "recovery_context": agent_context,
+        "attempt_number": previous_attempts,
         "recovery_probability": prob,
         "economic_decision": {
             "recommended_action": decision_output.recommended_action.value,
+            "economically_viable_actions": [a.value for a in decision_output.economically_viable_actions],
             "expected_net_value": decision_output.economics.expected_net_value,
+            "gross_recovery_value": decision_output.economics.gross_recovery_value,
+            "intervention_cost": decision_output.economics.intervention_cost,
             "decision_reason": decision_output.decision_reason
         },
         "audit_metadata": state.get("audit_metadata", []) + [new_audit],
@@ -79,17 +143,40 @@ def propose_action_node(state: RecoveryState) -> RecoveryState:
     }, indent=2)
     
     proposal = llm.propose_action(context_summary, AgentActionProposal)
+    proposed_action_value = proposal.action.value
     
-    new_audit = create_audit_record("propose_action", {
-        "action": proposal.action.value,
-        "rationale": proposal.rationale,
-        "confidence": proposal.confidence
-    })
+    # ENFORCE ECONOMIC AUTHORITY
+    viable_actions = state["economic_decision"].get("economically_viable_actions", [])
+    
+    # Always allow the LLM to STOP (abort the recovery safely)
+    if "STOP" not in viable_actions:
+        viable_actions = viable_actions + ["STOP"]
+
+    # Fallback to recommended action if the proposed one isn't economically viable
+    if proposed_action_value not in viable_actions:
+        fallback_action = state["economic_decision"]["recommended_action"]
+        audit_details = {
+            "action": fallback_action,
+            "original_proposal": proposed_action_value,
+            "rationale": "OVERRIDDEN BY ECONOMIC ENGINE. Proposal was not economically viable.",
+            "confidence": proposal.confidence
+        }
+        proposed_action_value = fallback_action
+        rationale = audit_details["rationale"]
+    else:
+        audit_details = {
+            "action": proposed_action_value,
+            "rationale": proposal.rationale,
+            "confidence": proposal.confidence
+        }
+        rationale = proposal.rationale
+
+    new_audit = create_audit_record("propose_action", audit_details)
     
     return {
         **state,
-        "proposed_action": proposal.action.value,
-        "rationale": proposal.rationale,
+        "proposed_action": proposed_action_value,
+        "rationale": rationale,
         "confidence": proposal.confidence,
         "audit_metadata": state.get("audit_metadata", []) + [new_audit]
     }
@@ -110,7 +197,9 @@ def policy_check_node(state: RecoveryState) -> RecoveryState:
         seconds_since_last_attempt=ctx.get("seconds_since_last_attempt"),
         last_action_type=ctx.get("last_action_type"),
         seconds_since_last_action=ctx.get("seconds_since_last_action"),
-        contact_attempts_last_24h=ctx.get("contact_attempts_last_24h", 0)
+        contact_attempts_last_24h=ctx.get("contact_attempts_last_24h", 0),
+        payment_method="unknown",
+        error_code=state["recovery_context"].get("error_code", "")
     )
     
     engine = PolicyEngine()

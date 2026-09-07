@@ -51,6 +51,16 @@ class DecisionOutput(BaseModel):
     # Calculated economics
     economics: Economics
 
+    # Action sets
+    eligible_actions: List[RecoveryActionType] = Field(
+        default_factory=list,
+        description="Actions that are contextually allowed"
+    )
+    economically_viable_actions: List[RecoveryActionType] = Field(
+        default_factory=list, 
+        description="Actions that are both eligible and have expected_net_value > 0"
+    )
+
     # Final decision
     recommended_action: RecoveryActionType
     decision_reason: str

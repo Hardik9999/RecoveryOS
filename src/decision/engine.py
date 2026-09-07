@@ -152,6 +152,8 @@ def decide(inputs: DecisionInput) -> DecisionOutput:
             timestamp=now,
             inputs=inputs,
             economics=econ,
+            eligible_actions=[],
+            economically_viable_actions=[],
             recommended_action=RecoveryActionType.STOP,
             decision_reason=(
                 f"Maximum recovery attempts reached "
@@ -171,6 +173,8 @@ def decide(inputs: DecisionInput) -> DecisionOutput:
             timestamp=now,
             inputs=inputs,
             economics=econ,
+            eligible_actions=[],
+            economically_viable_actions=[],
             recommended_action=RecoveryActionType.STOP,
             decision_reason=(
                 f"Recovery probability {inputs.recovery_probability:.2%} is below the "
@@ -200,6 +204,8 @@ def decide(inputs: DecisionInput) -> DecisionOutput:
             timestamp=now,
             inputs=inputs,
             economics=econ,
+            eligible_actions=[],
+            economically_viable_actions=[],
             recommended_action=RecoveryActionType.STOP,
             decision_reason=stop_reason,
             confidence=_confidence_label(inputs.recovery_probability),
@@ -213,15 +219,17 @@ def decide(inputs: DecisionInput) -> DecisionOutput:
     # whose expected net value is positive. This ensures:
     #   - We never select an ineligible action due to EV math
     #   - We gracefully downgrade WITHIN the context-appropriate set only
+    economically_viable_actions = []
     selected_action = None
     selected_econ = None
 
     for action in eligible_actions:
         econ = calculate_economics(inputs, action)
         if econ.is_economically_viable:
-            selected_action = action
-            selected_econ = econ
-            break
+            economically_viable_actions.append(action)
+            if selected_action is None:
+                selected_action = action
+                selected_econ = econ
 
     # Nothing in the eligible set is economically viable — stop
     if selected_action is None:
@@ -233,6 +241,8 @@ def decide(inputs: DecisionInput) -> DecisionOutput:
             timestamp=now,
             inputs=inputs,
             economics=stop_econ,
+            eligible_actions=eligible_actions,
+            economically_viable_actions=[],
             recommended_action=RecoveryActionType.STOP,
             decision_reason=(
                 f"No eligible action is economically viable for this failure context "
@@ -270,6 +280,8 @@ def decide(inputs: DecisionInput) -> DecisionOutput:
         timestamp=now,
         inputs=inputs,
         economics=selected_econ,
+        eligible_actions=eligible_actions,
+        economically_viable_actions=economically_viable_actions,
         recommended_action=selected_action,
         decision_reason=" ".join(reason_parts),
         confidence=confidence,
