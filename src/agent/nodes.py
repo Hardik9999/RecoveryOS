@@ -108,7 +108,12 @@ def load_context_node(state: RecoveryState, db_session: Session) -> RecoveryStat
     
     new_audit = create_audit_record("load_context", {
         "recommended_action": decision_output.recommended_action.value,
-        "economic_reasoning": decision_output.decision_reason
+        "economically_viable_actions": [a.value for a in decision_output.economically_viable_actions],
+        "economic_reasoning": decision_output.decision_reason,
+        "error_code": failure.error_code,
+        "failure_category": tax_info["category"],
+        "failure_severity": tax_info["severity"],
+        "is_retryable": tax_info["is_retryable"]
     })
     
     return {

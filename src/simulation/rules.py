@@ -48,7 +48,7 @@ FAILURE_RULES: Dict[str, FailureRule] = {
     "WALLET:LOW_BALANCE": FailureRule("WALLET:LOW_BALANCE", "USER", True, 0.0, 0.75),
 }
 
-def determine_failure_type(random_val: float, payment_method: str = "unknown") -> FailureRule:
+def determine_failure_type(random_val: float, payment_method: str = "unknown", rng: random.Random = random) -> FailureRule:
     """
     Deterministically choose a failure type based on a random float [0.0, 1.0) and payment method.
     """
@@ -63,7 +63,7 @@ def determine_failure_type(random_val: float, payment_method: str = "unknown") -
         
     elif payment_method == "card":
         # Randomly assign Visa or Mastercard prefix for realism
-        prefix = "VISA:" if random.random() < 0.6 else "MC:"
+        prefix = "VISA:" if rng.random() < 0.6 else "MC:"
         if random_val < 0.45: return FAILURE_RULES[f"{prefix}51"] # Insufficient funds
         elif random_val < 0.65: return FAILURE_RULES[f"{prefix}05"] # Do not honor
         elif random_val < 0.80: return FAILURE_RULES[f"{prefix}91" if prefix == "VISA:" else f"{prefix}96"] # Timeout

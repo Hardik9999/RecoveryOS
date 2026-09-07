@@ -95,8 +95,9 @@ flowchart LR
     B --> C[2. ML Prediction Engine]
     C --> D[3. Economic Evaluation]
     D --> E[4. Agent Proposal]
-    E --> F{5. Deterministic Policy}
-    F -- ALLOW --> G[6. Safe Execution]
+    E --> V[5. Economic Validation]
+    V --> F{6. Deterministic Policy}
+    F -- ALLOW --> G[7. Safe Execution]
     F -- DENY --> H[STOP / FAILED_TERMINAL]
     G --> I[Observed Outcome & Audit Log]
     I -- If Failed & Retries < 3 --> E
@@ -107,8 +108,9 @@ flowchart LR
 3. **Economic Decision (`src/decision/`):** Calculates Expected Net Value:
    $$\text{Expected Net Value (ENV)} = (\text{Amount} \times P(\text{recovery})) - \text{Intervention Cost}$$
 4. **Agent Proposal (`src/agent/`):** LangGraph reasoner proposes the best recovery action and operational rationale using structured schemas.
-5. **Deterministic Policy (`src/policy/`):** 9 safety rules enforce retry limits (max 3), cooldown windows, customer risk thresholds, and fraud blocks.
-6. **Execution & Audit (`src/execution/`):** Dispatches authorized actions via an idempotent adapter and logs immutable records in `audit_logs`.
+5. **Economic Validation:** Agent's proposal is strictly checked against the `economically_viable_actions` computed in stage 3. If negative EV, it is overridden to the safest viable fallback (often `STOP`).
+6. **Deterministic Policy (`src/policy/`):** 9 safety rules enforce retry limits (max 3), cooldown windows, customer risk thresholds, and fraud blocks.
+7. **Execution & Audit (`src/execution/`):** Dispatches authorized actions via an idempotent adapter and logs immutable records in `audit_logs`.
 
 ---
 
@@ -159,9 +161,10 @@ RecoveryOS/
 ├── models/               # Serialized ML model artifacts & metadata
 ├── migrations/           # Alembic database version control
 ├── docs/                 # System architecture & database documentation
-├── scripts/              # Audit & validation scripts
-├── demo/                 # Demo walkthrough guides, videos & screenshots
 │   ├── DEMO_FLOW_AND_SCRIPT.md
+├── scripts/              # Audit & validation scripts
+│   └── run_benchmark.py
+├── demo/                 # Demo walkthrough videos & screenshots
 │   ├── README.md
 │   └── screenshots/
 ├── .env.example          # Environment variable template
@@ -176,7 +179,7 @@ RecoveryOS/
 ## 9. Demo & Walkthrough
 
 A comprehensive step-by-step video script and screen-by-screen talking points are located in:
-👉 [`demo/DEMO_FLOW_AND_SCRIPT.md`](demo/DEMO_FLOW_AND_SCRIPT.md)
+👉 [`docs/DEMO_FLOW_AND_SCRIPT.md`](docs/DEMO_FLOW_AND_SCRIPT.md)
 
 Place the final demo video file at:
 ```text
@@ -255,7 +258,7 @@ pytest tests/ -v
 
 ### Verified Test Results:
 ```text
-======================== 164 passed, 1 warning in 2.72s ========================
+======================== 167 passed, 1 warning in 4.21s ========================
 ```
 - **Phase 1 (Database):** Models, GUID types, relationships, and cascades.
 - **Phase 2 (Simulation):** Deterministic payment state transitions and error rules.
@@ -265,17 +268,36 @@ pytest tests/ -v
 - **Phase 6 (Policy):** All 9 deterministic guardrail rules, boundary conditions, and priority ordering.
 - **Phase 7 (Agent):** LangGraph state transitions, loops, idempotency, and policy vetoes.
 - **Phase 8 (API):** FastAPI endpoints, batch recovery, and end-to-end integration flows.
+- **Phase 9 (Closed Loop):** Verifies the full recursive recovery loop operates correctly with step-by-step state reconstruction.
 
 ---
 
-## 12. Limitations & Future Work
+## 12. Benchmark & Simulation
+
+### Business Impact Benchmark
+You can run a localized portfolio-level benchmark to compare RecoveryOS to a naive retry approach:
+```bash
+python scripts/run_benchmark.py
+```
+This script processes 1,000 synthetic payments through both pipelines, outputting the net financial impact, intervention costs avoided, and total policy denials.
+
+### Simulator Transparency
+The execution engine runs against a deterministic Simulator (`src/simulation/simulator.py`) instead of a live gateway.
+- Outcomes are strictly bound by a seeded PRNG ensuring 100% reproducibility.
+- Recoverability probabilities (e.g. Visa:05) are hardcoded into the simulated rules.
+- The simulator tracks and respects external constraints (like blocking repeated identical retries within a cooldown).
+
+---
+
+## 13. Limitations & Future Work
 
 - **Live Payment Gateway Adapter:** The current execution layer operates against a high-fidelity payment simulator. Integrating live Razorpay/Stripe webhooks and payout APIs is the natural next step.
+- **Model Training Data:** The XGBoost prediction model is trained on a purely synthetic dataset. In a real-world scenario, the model would need to be re-trained on actual historical transaction logs.
 - **Continuous Online Learning:** Model weights are currently loaded from versioned artifacts (`models/`). Future phases can add feedback loops to retrain the model on observed recovery outcomes.
 - **Multi-Channel Orchestration:** Adding support for automated WhatsApp interactive messages, IVR calls, and localized multi-language reminders.
 
 ---
 
-## 13. License
+## 14. License
 
 This project is licensed under the MIT License.

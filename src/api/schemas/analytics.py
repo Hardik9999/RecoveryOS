@@ -17,6 +17,7 @@ class AnalyticsSummaryResponse(BaseModel):
     interventions_avoided: int = 0
     escalations: int = 0
     stopped_payments: int = 0
+    policy_denied_count: int = 0
     intervention_cost: float = 0.0
     net_recovered_value: float = 0.0
     average_attempts: Optional[float] = None

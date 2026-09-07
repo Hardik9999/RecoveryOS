@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from src.database.models import Payment, PaymentFailure, RecoveryAction, RecoveryOutcome, Customer
 from src.simulation.simulator import PaymentSimulator
 from src.simulation.rules import FAILURE_RULES
+from src.decision.engine import MAX_RECOVERY_ATTEMPTS
 
 class SimulationAdapter:
     def __init__(self, db: Session, simulator: PaymentSimulator = None):
@@ -83,8 +84,8 @@ class SimulationAdapter:
 
         if is_success:
             payment.status = "RECOVERED"
-        elif not rule.is_retryable or action.attempt_number >= 3:
-            # Hardcode max 3 attempts for simulation terminal state logic
+        elif not rule.is_retryable or action.attempt_number >= MAX_RECOVERY_ATTEMPTS:
+            # Use policy max attempts for simulation terminal state logic
             payment.status = "FAILED_TERMINAL"
 
         self.db.commit()

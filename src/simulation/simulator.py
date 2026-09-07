@@ -41,7 +41,7 @@ class PaymentSimulator:
         
         # Payment fails. Determine the reason deterministically.
         failure_val = rng.random()
-        rule = determine_failure_type(failure_val, payment_method)
+        rule = determine_failure_type(failure_val, payment_method, rng)
         
         return False, rule, {
             "status": "failed", 

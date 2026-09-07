@@ -69,11 +69,20 @@ def analytics_summary(db: Session = Depends(get_db)):
         RecoveryAction.action_type == "ESCALATE"
     ).scalar() or 0
 
-    # STOP actions
-    stopped_payments = db.query(func.count(RecoveryAction.id)).filter(
-        RecoveryAction.action_type == "STOP"
+    # STOP actions: FAILED_TERMINAL payments with no EXECUTED actions
+    payments_with_executed_actions = db.query(RecoveryAction.payment_id).filter(
+        RecoveryAction.action_status == "EXECUTED"
+    ).distinct().subquery()
+    
+    stopped_payments = db.query(func.count(Payment.id)).filter(
+        Payment.status == "FAILED_TERMINAL",
+        ~Payment.id.in_(db.query(payments_with_executed_actions))
     ).scalar() or 0
 
+    # Policy Denied
+    policy_denied_count = db.query(func.count(RecoveryAction.id)).filter(
+        RecoveryAction.action_status == "POLICY_DENIED"
+    ).scalar() or 0
     # Interventions avoided: failed payments that were never acted on
     payments_with_actions = db.query(RecoveryAction.payment_id).distinct().subquery()
     interventions_avoided = db.query(func.count(Payment.id)).filter(
@@ -118,6 +127,7 @@ def analytics_summary(db: Session = Depends(get_db)):
         interventions_avoided=interventions_avoided,
         escalations=escalations,
         stopped_payments=stopped_payments,
+        policy_denied_count=policy_denied_count,
         intervention_cost=round(intervention_cost, 2),
         net_recovered_value=round(net_recovered_value, 2),
         average_attempts=round(average_attempts, 2) if average_attempts is not None else None

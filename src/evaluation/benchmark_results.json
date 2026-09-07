@@ -1,0 +1,28 @@
+{
+  "baseline": {
+    "name": "Baseline",
+    "population_size": 100,
+    "recovery_rate": 0.27,
+    "recovered_value": 73096.16,
+    "intervention_cost": 490.0,
+    "net_recovered_value": 72606.16,
+    "average_attempts": 1.3,
+    "escalations": 0,
+    "recovered_count": 27,
+    "stopped_count": 73,
+    "total_attempts": 245
+  },
+  "recoveryos": {
+    "name": "RecoveryOS",
+    "population_size": 100,
+    "recovery_rate": 0.4,
+    "recovered_value": 110845.53,
+    "intervention_cost": 1704.0,
+    "net_recovered_value": 109141.53,
+    "average_attempts": 1.0,
+    "escalations": 0,
+    "recovered_count": 40,
+    "stopped_count": 60,
+    "total_attempts": 667
+  }
+}
