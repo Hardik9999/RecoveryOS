@@ -73,3 +73,10 @@ class APIClient:
         """Process a batch of eligible failed payments."""
         resp = requests.post(f"{API_BASE_URL}/recovery/batch", json={"limit": limit}, timeout=TIMEOUT_SEC * 5)
         return APIClient._handle_response(resp)
+
+    @staticmethod
+    def get_escalation_queue(limit: int = 200, offset: int = 0) -> Dict[str, Any]:
+        """Fetch payments flagged for human escalation."""
+        params = {"limit": limit, "offset": offset}
+        resp = requests.get(f"{API_BASE_URL}/payments/escalation-queue", params=params, timeout=10)
+        return APIClient._handle_response(resp)

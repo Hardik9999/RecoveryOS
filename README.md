@@ -85,6 +85,7 @@ flowchart TD
         A2[Payment Explorer]
         A3[Decision Trace]
         A4[Recovery Operations]
+        A5[Escalation Queue]
     end
 
     subgraph API ["FastAPI REST Layer"]
@@ -92,6 +93,7 @@ flowchart TD
         B2["/payments"]
         B3["/payments/{id}/recover"]
         B4["/recovery/batch"]
+        B5["/payments/escalation-queue"]
     end
 
     subgraph Service ["Orchestration Service"]
@@ -138,15 +140,22 @@ flowchart LR
     I -- If Failed & Attempts < 3 --> B
 ```
 
-1. **Failure Intelligence (`src/intelligence/`):** Normalizes gateway error codes (`VISA:05`, `NPCI:U29`, `MC:54`, etc.) into `{category, severity, is_retryable}`. Covers NPCI, Visa, Mastercard, and generic codes.
+1. **Failure Intelligence (`src/intelligence/`):** Normalizes gateway error codes (`VISA:05`, `NPCI:U29`, `MC:54`, etc.) into `{category, severity, is_retryable}`. Severity levels — `LOW`, `MEDIUM`, `HIGH`, `TERMINAL` — reflect true recoverability: `TERMINAL` is reserved for genuine hard-rejects (fraud, lost cards). Non-fraud non-retryable failures (blocked accounts, expired cards) are classified `HIGH` so the escalation path is correctly activated.
 2. **ML Recovery Prediction (`src/prediction/`):** XGBoost model trained on synthetic transaction data produces a calibrated $P(\text{recovery})$. Features are extracted at point-in-time to prevent leakage.
 3. **Economic Decision (`src/decision/`):** Computes Expected Net Value for every eligible action:
    $$\text{ENV} = (\text{Amount} \times P(\text{recovery})) - \text{Intervention Cost}$$
-   Only actions with ENV > 0 enter the viable set. The LLM can only choose from this set.
+   Only actions with ENV > 0 enter the viable set. The LLM can only choose from this set. For `ESCALATE`, intervention cost is ₹15 — below this breakeven the engine automatically stops instead of escalating unprofitably.
 4. **Agent Proposal (`src/agent/`):** LangGraph orchestrator proposes the best action with a human-readable rationale.
 5. **Economic Validation:** Agent's proposal is checked against `economically_viable_actions`. If the proposal has negative ENV, it is overridden to the recommended action. The override is logged in the audit trail.
 6. **Deterministic Policy (`src/policy/`):** 9 independent rules — including max 3 attempts, 5-minute cooldown, contact frequency cap (3 per 24h), fraud/terminal blocks, and amount ceiling (₹50,000) — must all pass.
 7. **Execution & Audit (`src/execution/`):** Authorized actions are dispatched idempotently and outcomes persist to the database. The full audit trail is queryable.
+
+**Escalation routing logic:**
+- `FRAUD` + any severity → **STOP** (no recovery action is ever appropriate)
+- `TERMINAL` + non-FRAUD + non-retryable → **ESCALATE** if ENV > ₹15, else **STOP** (e.g., blocked account, expired card — human agent can contact customer)
+- `TERMINAL` + FRAUD → **STOP** (caught by the FRAUD gate above)
+- Non-retryable, non-TERMINAL → **ESCALATE** if economically viable
+- Retryable → RETRY / SEND_PAYMENT_REMINDER / SEND_PAYMENT_LINK based on economics
 
 ---
 
@@ -187,12 +196,13 @@ All 9 rules pass: 0 prior attempts (under limit), no cooldown violation, contact
 
 ## 8. Operations Console (Streamlit UI)
 
-The Streamlit UI communicates exclusively via the FastAPI REST layer and provides 4 operational views:
+The Streamlit UI communicates exclusively via the FastAPI REST layer and provides **5 operational views:**
 
 - **Executive Dashboard:** High-level KPIs — Revenue at Risk, Revenue Recovered, Net Recovered Value, Recovery Rate, and Outcome Breakdown with Plotly charts.
 - **Payment Explorer:** Drill into individual payment failures — failure taxonomy, customer risk profile, prior attempts, and 1-click recovery execution.
 - **Decision Trace:** A 7-stage visual audit pipeline. Clearly separates the Failure Diagnosis, Economic Evaluation, AI Advisory, Economic Validation status, Policy Authorization, and Execution Result. Shows whether an economic override was applied.
 - **Recovery Operations:** Automated batch recovery console — process bulk failed payments with aggregate performance metrics.
+- **Escalation Queue:** A human agent intervention view. Lists every payment flagged for `ESCALATE` (non-fraud, non-retryable failures where a human agent can recover value). Shows priority tier, gross recovery potential, agent cost breakeven, error code, and failure category. Filterable by category and payment method, with CSV export.
 
 ---
 
@@ -227,9 +237,14 @@ RecoveryOS/
 │   ├── app.py            # Streamlit console entrypoint
 │   ├── api_client.py     # HTTP transport client calling FastAPI
 │   ├── pages/            # Multi-page dashboard views
+│   │   ├── 1_Executive_Dashboard.py
+│   │   ├── 2_Payment_Explorer.py
+│   │   ├── 3_Decision_Trace.py
+│   │   ├── 4_Recovery_Operations.py
+│   │   └── 5_Escalation_Queue.py  # Human agent intervention queue
 │   ├── utils/            # SVG vector icons & formatting utilities
 │   └── assets/           # Application favicon & branding assets
-├── tests/                # 167 unit, integration, and closed-loop tests
+├── tests/                # 169 unit, integration, and closed-loop tests
 ├── models/               # Serialized ML model artifacts & metadata
 ├── migrations/           # Alembic database version control
 ├── docs/                 # System architecture & demo script
@@ -312,17 +327,17 @@ PYTHONPATH=. pytest tests/ -v
 
 ### Verified Test Results:
 ```text
-======================== 167 passed, 1 warning in 4.21s ========================
+======================== 169 passed, 1 warning in 3.04s ========================
 ```
 
 - **Phase 1 (Database):** Models, GUID types, relationships, and cascades.
 - **Phase 2 (Simulation):** Deterministic payment state transitions and failure rules.
 - **Phase 3 (Intelligence):** Failure taxonomy classification and point-in-time feature extraction.
 - **Phase 4 (Prediction):** ML model inference, probability calibration, and leakage prevention.
-- **Phase 5 (Economics):** Gross recovery value, intervention costs, and Expected Net Value.
+- **Phase 5 (Economics):** Gross recovery value, intervention costs, Expected Net Value, and TERMINAL non-FRAUD escalation routing.
 - **Phase 6 (Policy):** All 9 deterministic guardrail rules, boundary conditions, and priority ordering.
 - **Phase 7 (Agent):** LangGraph state transitions, economic authority enforcement, and policy vetoes.
-- **Phase 8 (API):** FastAPI endpoints, batch recovery, and end-to-end integration flows.
+- **Phase 8 (API):** FastAPI endpoints, batch recovery, escalation queue, and end-to-end integration flows.
 - **Phase 9 (Closed Loop):** Step-by-step state reconstruction verifying the full recursive recovery loop.
 
 ---

@@ -270,9 +270,44 @@ class TestEligibilityFilteredDowngrade:
         Even if recovery_probability is high and economics are favorable.
         """
         inp = make_input(
+            failure_category="FRAUD",
             failure_severity="TERMINAL",
             recovery_probability=0.80,
             amount=5000.0,
+            is_retryable=False
+        )
+        out = decide(inp)
+        assert out.recommended_action == RecoveryActionType.STOP
+        assert out.blocked_by_policy is True
+        assert out.policy_block_reason == "FAILURE_NON_RECOVERABLE"
+
+    def test_terminal_non_fraud_non_retryable_escalates(self):
+        """
+        TERMINAL severity without FRAUD (e.g. blocked account, expired card):
+        a human agent may still recover — engine should recommend ESCALATE
+        when the economics are viable (amount * prob > ₹15 cost).
+        """
+        inp = make_input(
+            failure_category="BANK",
+            failure_severity="TERMINAL",
+            recovery_probability=0.40,
+            amount=500.0,
+            is_retryable=False
+        )
+        out = decide(inp)
+        # Gross = 500 * 0.4 = ₹200 > ₹15 cost → ESCALATE is economically viable
+        assert out.recommended_action == RecoveryActionType.ESCALATE
+
+    def test_terminal_non_fraud_below_breakeven_stops(self):
+        """
+        TERMINAL non-FRAUD but below the ₹15 ESCALATE cost breakeven:
+        the economics engine should override to STOP — not worth the agent's time.
+        """
+        inp = make_input(
+            failure_category="BANK",
+            failure_severity="TERMINAL",
+            recovery_probability=0.20,
+            amount=30.0,   # 30 * 0.20 = ₹6 < ₹15 cost
             is_retryable=False
         )
         out = decide(inp)

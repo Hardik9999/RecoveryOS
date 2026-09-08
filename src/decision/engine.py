@@ -73,6 +73,8 @@ def _get_eligible_actions(inputs: DecisionInput) -> List[RecoveryActionType]:
 
     # TERMINAL severity: gateway has hard-rejected this. No action is appropriate.
     if inputs.failure_severity == "TERMINAL":
+        if not inputs.is_retryable:
+            return [RecoveryActionType.ESCALATE]
         return []
 
     # Non-retryable by the gateway: cannot send retry or reminder (they'd just fail again).

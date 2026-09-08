@@ -98,7 +98,7 @@ FAILURE_TAXONOMY: Dict[str, TaxonomyInfo] = {
     "NPCI:U31": {
         "category": "BANK",
         "is_retryable": False,
-        "severity": "TERMINAL",
+        "severity": "HIGH",
         "network": "NPCI",
         "description": "Account Blocked / Frozen / Dormant VPA",
         "recommended_action": "ESCALATE"
@@ -180,7 +180,7 @@ FAILURE_TAXONOMY: Dict[str, TaxonomyInfo] = {
     "VISA:54": {
         "category": "USER",
         "is_retryable": False,
-        "severity": "TERMINAL",
+        "severity": "HIGH",
         "network": "VISA",
         "description": "Expired Card",
         "recommended_action": "SEND_PAYMENT_LINK"
@@ -188,7 +188,7 @@ FAILURE_TAXONOMY: Dict[str, TaxonomyInfo] = {
     "MC:54": {
         "category": "USER",
         "is_retryable": False,
-        "severity": "TERMINAL",
+        "severity": "HIGH",
         "network": "MASTERCARD",
         "description": "Expired Card",
         "recommended_action": "SEND_PAYMENT_LINK"

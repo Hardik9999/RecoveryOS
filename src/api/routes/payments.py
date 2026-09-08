@@ -100,6 +100,63 @@ def list_payments(
 
 
 @router.get(
+    "/escalation-queue",
+    summary="Escalation Queue",
+    description="Returns all payments flagged for human intervention (ESCALATE action executed).",
+)
+def escalation_queue(
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db)
+):
+    """Return payments where an ESCALATE action was executed, sorted by amount descending."""
+    escalated_payment_ids = (
+        db.query(RecoveryAction.payment_id)
+        .filter(
+            RecoveryAction.action_type == "ESCALATE",
+            RecoveryAction.action_status == "EXECUTED"
+        )
+        .distinct()
+        .subquery()
+    )
+
+    query = db.query(Payment).filter(Payment.id.in_(escalated_payment_ids))
+    total = query.count()
+    payments = query.order_by(Payment.amount.desc()).offset(offset).limit(limit).all()
+
+    items = []
+    for p in payments:
+        failure = p.failures[0] if p.failures else None
+        escalate_action = next(
+            (a for a in p.recovery_actions if a.action_type == "ESCALATE"),
+            None
+        )
+        gross_recovery_value = None
+        predicted_prob = None
+        if escalate_action:
+            predicted_prob = escalate_action.predicted_recovery_prob
+            if predicted_prob and p.amount:
+                gross_recovery_value = round(float(p.amount) * predicted_prob, 2)
+
+        items.append({
+            "payment_id": str(p.id),
+            "amount": float(p.amount),
+            "currency": p.currency,
+            "payment_method": p.payment_method,
+            "status": p.status,
+            "created_at": str(p.created_at) if p.created_at else None,
+            "error_code": failure.error_code if failure else None,
+            "error_message": failure.error_message if failure else None,
+            "failure_category": failure.failure_category if failure else None,
+            "is_retryable": failure.is_retryable if failure else None,
+            "predicted_recovery_prob": predicted_prob,
+            "gross_recovery_value": gross_recovery_value,
+            "escalated_at": str(escalate_action.attempted_at) if escalate_action else None,
+        })
+
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+@router.get(
     "/{payment_id}",
     response_model=PaymentResponse,
     summary="Get payment details",

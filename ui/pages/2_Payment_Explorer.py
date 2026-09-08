@@ -111,18 +111,14 @@ try:
                         network = render_badge("Netbanking", status="default")
                     
                     st.markdown(
-                        f"""
-                        <div class="info-panel">
-                            <div style="display:flex;gap:8px;margin-bottom:10px;">
-                                {network}
-                                {cat_badge}
-                                {ret_badge}
-                            </div>
-                            <div style="font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:4px;">Error Code: <span class="text-mono" style="color:#f87171;">{error_code}</span></div>
-                            <div class="text-muted">{f.get('error_message')}</div>
-                            <div style="font-size:11px;color:#64748b;">Occurred At: {f.get('occurred_at')}</div>
-                        </div>
-                        """,
+                        f"""<div class="info-panel">
+<div style="display:flex;gap:8px;margin-bottom:10px;">
+{network}{cat_badge}{ret_badge}
+</div>
+<div style="font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:4px;">Error Code: <span class="text-mono" style="color:#f87171;">{error_code}</span></div>
+<div class="text-muted">{f.get('error_message')}</div>
+<div style="font-size:11px;color:#64748b;">Occurred At: {f.get('occurred_at')}</div>
+</div>""",
                         unsafe_allow_html=True
                     )
                 else:
