@@ -2,7 +2,6 @@
 Execution Layer Base Abstraction.
 
 Separates the agent/orchestration from the actual execution backend
-(Simulator vs. Razorpay Test Mode).
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any
